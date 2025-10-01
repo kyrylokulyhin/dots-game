@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dots Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #1a1a2e;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: #eee;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .info {
+            margin-bottom: 20px;
+            font-size: 16px;
+            color: #eee;
+            display: flex;
+            gap: 30px;
+        }
+
+        canvas {
+            border: 2px solid #444;
+            background: #0f0f1e;
+            cursor: crosshair;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #2563EB;
+        }
+    </style>
+</head>
+<body>
+<h1>Dots Game - Phase 1</h1>
+<div class="info">
+    <div>Current Turn: <span id="currentTurn" style="font-weight: bold;">Blue</span></div>
+    <div>Score - Blue: <span id="scoreP1">0</span> | Yellow: <span id="scoreP2">0</span></div>
+</div>
+<canvas id="gameCanvas"></canvas>
+<div class="controls">
+    <button onclick="game.reset()">Reset Board</button>
+</div>
+
+<script>
+    const COLORS = {
+        BLUE: '#3B82F6',
+        YELLOW: '#FCD34D',
+        PINK: '#EC4899',
+        GRID: '#333',
+        EMPTY: '#1a1a2e'
+    };
+
+    class DotsGame {
+        constructor(width, height, cellSize) {
+            this.width = width;   // number of intersections horizontally
+            this.height = height; // number of intersections vertically
+            this.cellSize = cellSize;
+            this.offsetX = 20;
+            this.offsetY = 20;
+            this.grid = [];
+
+            // Game state
+            this.player1Color = COLORS.BLUE;
+            this.player2Color = COLORS.YELLOW;
+            this.currentTurn = this.player1Color;
+            this.scoreP1 = 0;
+            this.scoreP2 = 0;
+
+            // Initialize empty grid (intersections, not cells)
+            for (let y = 0; y < height; y++) {
+                this.grid[y] = [];
+                for (let x = 0; x < width; x++) {
+                    this.grid[y][x] = null; // null = empty intersection
+                }
+            }
+
+            // Setup canvas - add padding for dots at edges
+            this.canvas = document.getElementById('gameCanvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.canvas.width = (width - 1) * cellSize + 40; // padding for edge dots
+            this.canvas.height = (height - 1) * cellSize + 40;
+
+            // Add click listener
+            this.canvas.addEventListener('click', (e) => this.handleClick(e));
+
+            // Add hover effect
+            this.canvas.addEventListener('mousemove', (e) => this.handleHover(e));
+
+            this.hoverX = null;
+            this.hoverY = null;
+
+            this.render();
+            this.updateUI();
+        }
+
+        handleHover(event) {
+            const rect = this.canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            // Find nearest intersection
+            const gridX = Math.round((mouseX - this.offsetX) / this.cellSize);
+            const gridY = Math.round((mouseY - this.offsetY) / this.cellSize);
+
+            // Check if within bounds and empty
+            if (gridX >= 0 && gridX < this.width &&
+                gridY >= 0 && gridY < this.height &&
+                this.grid[gridY][gridX] === null) {
+
+                // Only update if hover position changed
+                if (this.hoverX !== gridX || this.hoverY !== gridY) {
+                    this.hoverX = gridX;
+                    this.hoverY = gridY;
+                    this.render();
+                }
+            } else {
+                // Clear hover if not over valid intersection
+                if (this.hoverX !== null) {
+                    this.hoverX = null;
+                    this.hoverY = null;
+                    this.render();
+                }
+            }
+        }
+
+        handleClick(event) {
+            const rect = this.canvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+
+            // Find nearest intersection
+            const gridX = Math.round((clickX - this.offsetX) / this.cellSize);
+            const gridY = Math.round((clickY - this.offsetY) / this.cellSize);
+
+            // Check if click is within grid bounds
+            if (gridX < 0 || gridX >= this.width || gridY < 0 || gridY >= this.height) {
+                return;
+            }
+
+            // Check if intersection is empty
+            if (this.grid[gridY][gridX] !== null) {
+                return; // Already occupied
+            }
+
+            // Place dot
+            this.placeDot(gridX, gridY, this.currentTurn);
+
+            // TODO: Check for captures here (Phase 2)
+
+            // Switch turn
+            this.switchTurn();
+
+            // Redraw
+            this.render();
+            this.updateUI();
+        }
+
+        switchTurn() {
+            this.currentTurn = this.currentTurn === this.player1Color
+                ? this.player2Color
+                : this.player1Color;
+        }
+
+        updateUI() {
+            const currentPlayerName = this.currentTurn === this.player1Color ? 'Blue' : 'Yellow';
+            document.getElementById('currentTurn').textContent = currentPlayerName;
+            document.getElementById('currentTurn').style.color = this.currentTurn;
+            document.getElementById('scoreP1').textContent = this.scoreP1;
+            document.getElementById('scoreP2').textContent = this.scoreP2;
+        }
+
+        placeDot(x, y, color) {
+            if (x >= 0 && x < this.width && y >= 0 && y < this.height) {
+                this.grid[y][x] = color;
+            }
+        }
+
+        render() {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+            // Draw grid lines
+            this.drawGrid();
+
+            // Draw hover preview
+            if (this.hoverX !== null && this.hoverY !== null) {
+                this.drawHoverPreview(this.hoverX, this.hoverY);
+            }
+
+            // Draw dots
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    if (this.grid[y][x]) {
+                        this.drawDot(x, y, this.grid[y][x]);
+                    }
+                }
+            }
+        }
+
+        drawHoverPreview(x, y) {
+            const centerX = this.offsetX + x * this.cellSize;
+            const centerY = this.offsetY + y * this.cellSize;
+            const radius = this.cellSize * 0.25;
+
+            // Draw semi-transparent preview dot
+            this.ctx.fillStyle = this.currentTurn + '60'; // Add alpha (60 = ~37% opacity)
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Draw ring around it
+            this.ctx.strokeStyle = this.currentTurn;
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, radius + 4, 0, Math.PI * 2);
+            this.ctx.stroke();
+        }
+
+        drawGrid() {
+            this.ctx.strokeStyle = COLORS.GRID;
+            this.ctx.lineWidth = 1;
+
+            // Vertical lines
+            for (let x = 0; x < this.width; x++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX + x * this.cellSize, this.offsetY);
+                this.ctx.lineTo(this.offsetX + x * this.cellSize, this.offsetY + (this.height - 1) * this.cellSize);
+                this.ctx.stroke();
+            }
+
+            // Horizontal lines
+            for (let y = 0; y < this.height; y++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX, this.offsetY + y * this.cellSize);
+                this.ctx.lineTo(this.offsetX + (this.width - 1) * this.cellSize, this.offsetY + y * this.cellSize);
+                this.ctx.stroke();
+            }
+
+            // Draw small circles at intersections to show where dots can go
+            this.ctx.fillStyle = '#555';
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    if (!this.grid[y][x]) { // only show empty intersections
+                        this.ctx.beginPath();
+                        this.ctx.arc(this.offsetX + x * this.cellSize, this.offsetY + y * this.cellSize, 3, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                }
+            }
+        }
+
+        drawDot(x, y, color) {
+            const centerX = this.offsetX + x * this.cellSize;
+            const centerY = this.offsetY + y * this.cellSize;
+            const radius = this.cellSize * 0.25;
+
+            // Draw dot with glow effect
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = color;
+
+            this.ctx.fillStyle = color;
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Reset shadow
+            this.ctx.shadowBlur = 0;
+
+            // Add highlight
+            const gradient = this.ctx.createRadialGradient(
+                centerX - radius * 0.3,
+                centerY - radius * 0.3,
+                0,
+                centerX,
+                centerY,
+                radius
+            );
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            this.ctx.fillStyle = gradient;
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        reset() {
+            // Clear grid
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    this.grid[y][x] = null;
+                }
+            }
+            this.currentTurn = this.player1Color;
+            this.scoreP1 = 0;
+            this.scoreP2 = 0;
+            this.render();
+            this.updateUI();
+        }
+    }
+
+    // Initialize game with 15x10 grid, 40px cells
+    const game = new DotsGame(15, 10, 40);
+</script>
+</body>
+</html>
