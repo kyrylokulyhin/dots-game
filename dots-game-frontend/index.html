@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dots Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Menu Screen */
+        #menu-screen {
+            text-align: center;
+        }
+
+        #menu-screen h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #3B82F6, #FCD34D);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        #menu-screen .subtitle {
+            color: #aaa;
+            margin-bottom: 3rem;
+            font-size: 1.1rem;
+        }
+
+        .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .menu-btn {
+            padding: 1.5rem;
+            background: rgba(59, 130, 246, 0.1);
+            border: 2px solid #3B82F6;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .menu-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .menu-btn.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: #666;
+        }
+
+        .menu-btn.disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .badge {
+            background: #FCD34D;
+            color: #1a1a2e;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        /* Game Screen */
+        #game-screen {
+            display: none;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .game-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .turn-indicator {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .score {
+            font-size: 1rem;
+            color: #aaa;
+        }
+
+        .game-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #2563EB;
+        }
+
+        .btn-secondary {
+            background: #6B7280;
+        }
+
+        .btn-secondary:hover {
+            background: #4B5563;
+        }
+
+        canvas {
+            border: 2px solid #444;
+            background: #0f0f1e;
+            cursor: crosshair;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            touch-action: none;
+            display: block;
+            margin: 0 auto;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1a1a2e;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 2px solid #3B82F6;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 1rem;
+            color: #3B82F6;
+        }
+
+        .modal-content p {
+            margin-bottom: 1.5rem;
+            color: #aaa;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #aaa;
+            text-align: left;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            background: #0f0f1e;
+            border: 2px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #3B82F6;
+        }
+
+        .share-link {
+            background: #0f0f1e;
+            padding: 12px;
+            border-radius: 6px;
+            border: 2px solid #3B82F6;
+            margin-bottom: 1rem;
+            word-break: break-all;
+            color: #3B82F6;
+            font-family: monospace;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .game-over-banner {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.75);
+            padding: 14px 28px;
+            border: 2px solid #3B82F6;
+            border-radius: 10px;
+            backdrop-filter: blur(6px);
+            font-weight: 600;
+            display: none;
+            z-index: 50;
+        }
+
+        .game-over-banner.visible { display: inline-block; }
+
+        @media (max-width: 600px) {
+            #menu-screen h1 {
+                font-size: 2rem;
+            }
+
+            .game-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Menu Screen -->
+    <div id="menu-screen">
+        <h1>🎮 Dots Game</h1>
+        <p class="subtitle">Capture your opponent's dots by surrounding them!</p>
+
+        <div class="menu-buttons">
+            <button class="menu-btn" onclick="startLocalGame()">
+                🏠 Local Game
+                <span class="badge">HOT SEAT</span>
+            </button>
+
+            <button class="menu-btn" onclick="showHostModal()">
+                🌐 Host Online Game
+            </button>
+
+            <button class="menu-btn" onclick="showJoinModal()">
+                🔗 Join Online Game
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen">
+        <div class="game-header">
+            <div class="game-info">
+                <div class="turn-indicator">
+                    Turn: <span id="currentTurn" style="color: #3B82F6;">Blue</span>
+                </div>
+                <div class="score">
+                    Score - Blue: <span id="scoreP1">0</span> | Yellow: <span id="scoreP2">0</span>
+                </div>
+            </div>
+            <div class="game-actions">
+                <button class="btn btn-secondary" onclick="resetGame()">🔄 Reset</button>
+                <button class="btn btn-secondary" onclick="backToMenu()">🏠 Menu</button>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="gameOverBanner" class="game-over-banner"></div>
+    </div>
+</div>
+
+<!-- Host Game Modal -->
+<div id="host-modal" class="modal">
+    <div class="modal-content">
+        <h2>🌐 Waiting for Opponent</h2>
+        <p>Share this link with your friend:</p>
+
+        <div class="share-link" id="share-link">
+            Generating link...
+        </div>
+
+        <div class="input-group">
+            <label>Or share this code:</label>
+            <input type="text" id="game-code" value="" readonly>
+        </div>
+
+        <p style="color: #FCD34D; font-size: 0.9rem; margin-top: 1rem;">
+            ⏳ Game will start automatically when your friend joins!
+        </p>
+
+        <div class="modal-buttons">
+            <button class="btn" onclick="copyShareLink()">📋 Copy Link</button>
+            <button class="btn btn-secondary" onclick="closeHostModalAndPlay()">Play While Waiting</button>
+        </div>
+    </div>
+</div>
+
+<!-- Join Game Modal -->
+<div id="join-modal" class="modal">
+    <div class="modal-content">
+        <h2>🔗 Join Game</h2>
+        <p>Enter the game code your friend shared with you</p>
+
+        <div class="input-group">
+            <label>Game Code:</label>
+            <input type="text" id="join-code" placeholder="ABCD-1234" style="text-transform: uppercase;">
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn" onclick="joinGame()">Join Game</button>
+            <button class="btn btn-secondary" onclick="closeModal('join-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const COLORS = {
+        BLUE: '#3B82F6',
+        YELLOW: '#FCD34D',
+        PINK: '#EC4899',
+        GRID: '#333',
+        EMPTY: '#1a1a2e'
+    };
+
+    function mapServerColor(serverColor) {
+        switch (serverColor) {
+            case 'Blue':   return COLORS.BLUE;
+            case 'Yellow': return COLORS.YELLOW;
+            case 'Pink':   return COLORS.PINK;
+            default:       return COLORS.PINK;
+        }
+    }
+
+    let game = null;
+    let gameMode = null;
+
+    // Simple hash router
+    class Router {
+        constructor() {
+            this.routes = {};
+            window.addEventListener('hashchange', () => this.handleRoute());
+            window.addEventListener('load',       () => this.handleRoute());
+        }
+
+        register(path, handler) { this.routes[path] = handler; }
+
+        navigate(path) { window.location.hash = path; }
+
+        handleRoute() {
+            const hash = window.location.hash.slice(1) || '/';
+            const [path, query] = hash.split('?');
+            const params = new URLSearchParams(query);
+            if (this.routes[path]) {
+                this.routes[path](params);
+            } else if (path.startsWith('/game/')) {
+                const parts = path.split('/');
+                if (parts[2] === 'online' && parts[3]) {
+                    this.routes['/game/online'](params, parts[3]);
+                } else if (parts[2] === 'local') {
+                    this.routes['/game/local'](params);
+                }
+            } else {
+                this.routes['/'](params);
+            }
+        }
+    }
+
+    const router = new Router();
+
+    router.register('/', (params) => {
+        showScreen('menu-screen');
+        if (params.get('join')) {
+            router.navigate(`/game/online/${params.get('join')}`);
+        }
+    });
+
+    router.register('/game/local', () => {
+        gameMode = 'local';
+        showScreen('game-screen');
+        if (game) { if (game.destroy) game.destroy(); }
+        game = new DotsGame(15, 10, 40);
+    });
+
+    router.register('/game/online', (params, gameCode) => {
+        gameMode = 'online';
+        showScreen('game-screen');
+        if (game) { if (game.disconnect) game.disconnect(); if (game.destroy) game.destroy(); }
+        game = new DotsGameOnline(15, 10, 40, gameCode);
+    });
+
+    function showScreen(id) {
+        document.getElementById('menu-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'none';
+        document.getElementById(id).style.display = 'block';
+    }
+
+    function startLocalGame() { router.navigate('/game/local'); }
+
+    function showHostModal() {
+        const gameCode = generateGameCode();
+        router.navigate(`/game/online/${gameCode}`);
+
+        document.getElementById('game-code').value = gameCode;
+
+        const protocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
+        const host     = window.location.protocol === 'file:' ? 'localhost' : window.location.host;
+        const path     = window.location.protocol === 'file:' ? '/index.html' : window.location.pathname;
+        document.getElementById('share-link').textContent =
+            `${protocol}//${host}${path}#/?join=${gameCode}`;
+
+        document.getElementById('host-modal').classList.add('active');
+    }
+
+    function closeHostModalAndPlay() { closeModal('host-modal'); }
+
+    function showJoinModal() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('join');
+        if (code) document.getElementById('join-code').value = code;
+        document.getElementById('join-modal').classList.add('active');
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    function generateGameCode() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        const rand = () => chars.charAt(Math.floor(Math.random() * chars.length));
+        return Array.from({length: 4}, rand).join('') + '-' + Array.from({length: 4}, rand).join('');
+    }
+
+    function copyShareLink() {
+        const link = document.getElementById('share-link').textContent;
+        navigator.clipboard.writeText(link).then(() => alert('Link copied to clipboard!'));
+    }
+
+    function joinGame() {
+        const code = document.getElementById('join-code').value.trim().toUpperCase();
+        if (code) {
+            closeModal('join-modal');
+            router.navigate(`/game/online/${code}`);
+        } else {
+            alert('Please enter a game code');
+        }
+    }
+
+    function backToMenu() {
+        if (game) {
+            if (game.disconnect) game.disconnect();
+            if (game.destroy)    game.destroy();
+            game = null;
+        }
+        gameMode = null;
+        router.navigate('/');
+    }
+
+    function resetGame() {
+        if (game && game.reset) game.reset();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Local hot-seat game — fully client-side, no server dependency
+    // ---------------------------------------------------------------------------
+    class DotsGame {
+        constructor(width, height, cellSize) {
+            this.width     = width;
+            this.height    = height;
+            this.cellSize  = cellSize;
+            this.offsetX   = 20;
+            this.offsetY   = 20;
+
+            this.player1Color = COLORS.BLUE;
+            this.player2Color = COLORS.YELLOW;
+            this.currentTurn  = this.player1Color;
+            this.scoreP1      = 0;
+            this.scoreP2      = 0;
+            this.gameEnded    = false;
+
+            this.grid = Array.from({length: height}, () => Array(width).fill(null));
+
+            this.capturedLoops = [];
+            this.hoverX = null;
+            this.hoverY = null;
+
+            this.canvas = document.getElementById('gameCanvas');
+            this.ctx    = this.canvas.getContext('2d');
+            this.canvas.width  = (width  - 1) * cellSize + 40;
+            this.canvas.height = (height - 1) * cellSize + 40;
+
+            this._onClick       = (e) => this.handleClick(e);
+            this._onMove        = (e) => this.handleHover(e);
+            this._onTouchStart  = (e) => { e.preventDefault(); this.handleClick(new MouseEvent('click', {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); };
+            this._onTouchMove   = (e) => { e.preventDefault(); this.handleHover(new MouseEvent('mousemove', {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); };
+            this.canvas.addEventListener('click',      this._onClick);
+            this.canvas.addEventListener('mousemove',  this._onMove);
+            this.canvas.addEventListener('touchstart', this._onTouchStart);
+            this.canvas.addEventListener('touchmove',  this._onTouchMove);
+
+            this.render();
+            this.updateUI();
+        }
+
+        // --- Game logic (mirrors server rules in game.rs) ---
+
+        handleClick(event) {
+            if (this.gameEnded) return;
+            const rect  = this.canvas.getBoundingClientRect();
+            const gridX = Math.round((event.clientX - rect.left  - this.offsetX) / this.cellSize);
+            const gridY = Math.round((event.clientY - rect.top   - this.offsetY) / this.cellSize);
+            if (gridX < 0 || gridX >= this.width || gridY < 0 || gridY >= this.height) return;
+            if (this.grid[gridY][gridX] !== null) return;
+
+            const capturingColor = this.currentTurn;
+            this.grid[gridY][gridX] = {color: this.currentTurn, captured: false};
+
+            const captureInfo = this._checkCaptures(this.currentTurn);
+            if (captureInfo.loop_points.length > 0) {
+                this.capturedLoops.push({points: captureInfo.loop_points, color: capturingColor});
+            }
+
+            this.currentTurn = this.currentTurn === this.player1Color ? this.player2Color : this.player1Color;
+
+            this.render();
+            this.updateUI();
+
+            const over = this._determineGameOver();
+            if (over) {
+                this.gameEnded = true;
+                this.handleGameOver(over);
+            }
+        }
+
+        _checkCaptures(placingColor) {
+            const opponentColor = placingColor === this.player1Color ? this.player2Color : this.player1Color;
+            const captured = [];
+
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const cell = this.grid[y][x];
+                    if (cell && !cell.captured && cell.color === opponentColor && this._isSurrounded(x, y, placingColor)) {
+                        captured.push([x, y]);
+                    }
+                }
+            }
+
+            for (const [x, y] of captured) {
+                this.grid[y][x] = {color: opponentColor, captured: true};
+            }
+
+            if (placingColor === this.player1Color) this.scoreP1 += captured.length;
+            else                                     this.scoreP2 += captured.length;
+
+            return {
+                count: captured.length,
+                loop_points: captured.length > 0 ? this._findLoopBoundary(captured, placingColor) : [],
+            };
+        }
+
+        _isSurrounded(x, y, wallColor) {
+            const visited = new Set();
+            const queue   = [[x, y]];
+            while (queue.length > 0) {
+                const [cx, cy] = queue.shift();
+                const key = cx + ',' + cy;
+                if (visited.has(key)) continue;
+                if (cx === 0 || cx === this.width - 1 || cy === 0 || cy === this.height - 1) return false;
+                visited.add(key);
+                for (const [nx, ny] of [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]]) {
+                    if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) continue;
+                    if (visited.has(nx + ',' + ny)) continue;
+                    const cell = this.grid[ny][nx];
+                    // wall-color occupied dots are the enclosing boundary — don't cross them
+                    if (cell && !cell.captured && cell.color === wallColor) continue;
+                    queue.push([nx, ny]);
+                }
+            }
+            return true;
+        }
+
+        _findLoopBoundary(captured, wallColor) {
+            const boundary = new Set();
+            for (const [cx, cy] of captured) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = cx + dx, ny = cy + dy;
+                        if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) continue;
+                        const cell = this.grid[ny][nx];
+                        if (cell && !cell.captured && cell.color === wallColor) {
+                            boundary.add(nx + ',' + ny);
+                        }
+                    }
+                }
+            }
+            return [...boundary].map(k => k.split(',').map(Number));
+        }
+
+        _determineGameOver() {
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    if (this.grid[y][x] === null) return null;
+                }
+            }
+            let winner = null;
+            if (this.scoreP1 > this.scoreP2)      winner = 'Blue';
+            else if (this.scoreP2 > this.scoreP1) winner = 'Yellow';
+            return {winner, score_p1: this.scoreP1, score_p2: this.scoreP2};
+        }
+
+        // --- Rendering ---
+
+        handleHover(event) {
+            const rect  = this.canvas.getBoundingClientRect();
+            const gridX = Math.round((event.clientX - rect.left - this.offsetX) / this.cellSize);
+            const gridY = Math.round((event.clientY - rect.top  - this.offsetY) / this.cellSize);
+            const valid = gridX >= 0 && gridX < this.width && gridY >= 0 && gridY < this.height && this.grid[gridY][gridX] === null;
+            if (valid) {
+                if (this.hoverX !== gridX || this.hoverY !== gridY) { this.hoverX = gridX; this.hoverY = gridY; this.render(); }
+            } else {
+                if (this.hoverX !== null) { this.hoverX = null; this.hoverY = null; this.render(); }
+            }
+        }
+
+        updateUI() {
+            const name = this.currentTurn === this.player1Color ? 'Blue' : 'Yellow';
+            const el = document.getElementById('currentTurn');
+            el.textContent = name;
+            el.style.color = this.currentTurn;
+            document.getElementById('scoreP1').textContent = this.scoreP1;
+            document.getElementById('scoreP2').textContent = this.scoreP2;
+        }
+
+        render() {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.drawGrid();
+            for (const loop of this.capturedLoops) this.drawLoopLines(loop.points, loop.color);
+            if (this.hoverX !== null) this.drawHoverPreview(this.hoverX, this.hoverY);
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const cell = this.grid[y][x];
+                    if (cell) this.drawDot(x, y, cell.color, cell.captured);
+                }
+            }
+        }
+
+        drawGrid() {
+            this.ctx.strokeStyle = COLORS.GRID;
+            this.ctx.lineWidth = 1;
+            for (let x = 0; x < this.width; x++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX + x * this.cellSize, this.offsetY);
+                this.ctx.lineTo(this.offsetX + x * this.cellSize, this.offsetY + (this.height - 1) * this.cellSize);
+                this.ctx.stroke();
+            }
+            for (let y = 0; y < this.height; y++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX,                          this.offsetY + y * this.cellSize);
+                this.ctx.lineTo(this.offsetX + (this.width - 1) * this.cellSize, this.offsetY + y * this.cellSize);
+                this.ctx.stroke();
+            }
+            this.ctx.fillStyle = '#555';
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    if (!this.grid[y][x]) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(this.offsetX + x * this.cellSize, this.offsetY + y * this.cellSize, 3, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                }
+            }
+        }
+
+        drawHoverPreview(x, y) {
+            const cx = this.offsetX + x * this.cellSize;
+            const cy = this.offsetY + y * this.cellSize;
+            const r  = this.cellSize * 0.25;
+            this.ctx.fillStyle   = this.currentTurn + '60';
+            this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+            this.ctx.strokeStyle = this.currentTurn;
+            this.ctx.lineWidth   = 2;
+            this.ctx.beginPath(); this.ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); this.ctx.stroke();
+        }
+
+        drawLoopLines(points, color) {
+            if (points.length < 2) return;
+            this.ctx.strokeStyle  = color;
+            this.ctx.lineWidth    = 3;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.globalAlpha  = 0.6;
+            for (let i = 0; i < points.length; i++) {
+                for (let j = i + 1; j < points.length; j++) {
+                    const [x1, y1] = points[i];
+                    const [x2, y2] = points[j];
+                    if (Math.abs(x1-x2) <= 1 && Math.abs(y1-y2) <= 1 && (x1 !== x2 || y1 !== y2)) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(this.offsetX + x1 * this.cellSize, this.offsetY + y1 * this.cellSize);
+                        this.ctx.lineTo(this.offsetX + x2 * this.cellSize, this.offsetY + y2 * this.cellSize);
+                        this.ctx.stroke();
+                    }
+                }
+            }
+            this.ctx.setLineDash([]); this.ctx.globalAlpha = 1;
+        }
+
+        drawDot(x, y, color, captured = false) {
+            const cx = this.offsetX + x * this.cellSize;
+            const cy = this.offsetY + y * this.cellSize;
+            const r  = this.cellSize * 0.25;
+            if (captured) {
+                this.ctx.shadowBlur  = 5;
+                this.ctx.shadowColor = color;
+                this.ctx.fillStyle   = color + '60';
+                this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+                this.ctx.shadowBlur  = 0;
+                this.ctx.strokeStyle = color; this.ctx.lineWidth = 3;
+                const s = r * 0.7;
+                this.ctx.beginPath();
+                this.ctx.moveTo(cx-s, cy-s); this.ctx.lineTo(cx+s, cy+s);
+                this.ctx.moveTo(cx+s, cy-s); this.ctx.lineTo(cx-s, cy+s);
+                this.ctx.stroke();
+            } else {
+                this.ctx.shadowBlur  = 10;
+                this.ctx.shadowColor = color;
+                this.ctx.fillStyle   = color;
+                this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+                this.ctx.shadowBlur  = 0;
+                const g = this.ctx.createRadialGradient(cx - r*0.3, cy - r*0.3, 0, cx, cy, r);
+                g.addColorStop(0, 'rgba(255,255,255,0.4)');
+                g.addColorStop(1, 'rgba(255,255,255,0)');
+                this.ctx.fillStyle = g;
+                this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+            }
+        }
+
+        handleGameOver(info) {
+            const banner = document.getElementById('gameOverBanner');
+            const winnerText = info.winner ? (info.winner === 'Blue' ? 'Blue Wins!' : 'Yellow Wins!') : 'Draw!';
+            banner.textContent = `${winnerText}  Blue ${info.score_p1} – Yellow ${info.score_p2}  •  Press Reset to play again`;
+            banner.classList.add('visible');
+            this.updateUI();
+        }
+
+        reset() {
+            this.capturedLoops = [];
+            this.grid = Array.from({length: this.height}, () => Array(this.width).fill(null));
+            this.currentTurn = this.player1Color;
+            this.scoreP1 = 0;
+            this.scoreP2 = 0;
+            this.gameEnded = false;
+            const banner = document.getElementById('gameOverBanner');
+            banner.classList.remove('visible');
+            banner.textContent = '';
+            this.render();
+            this.updateUI();
+        }
+
+        destroy() {
+            this.canvas.removeEventListener('click',      this._onClick);
+            this.canvas.removeEventListener('mousemove',  this._onMove);
+            this.canvas.removeEventListener('touchstart', this._onTouchStart);
+            this.canvas.removeEventListener('touchmove',  this._onTouchMove);
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Online multiplayer game — communicates with server via WebSocket
+    // ---------------------------------------------------------------------------
+    class DotsGameOnline {
+        constructor(width, height, cellSize, gameCode) {
+            this.width     = width;
+            this.height    = height;
+            this.cellSize  = cellSize;
+            this.offsetX   = 20;
+            this.offsetY   = 20;
+            this.gameCode  = gameCode;
+            this.ws        = null;
+            this.closed    = false;
+
+            this.playerNumber  = null;
+            this.myColor       = null;
+            this.player1Color  = COLORS.BLUE;
+            this.player2Color  = COLORS.YELLOW;
+            this.currentTurn   = this.player1Color;
+            this.scoreP1       = 0;
+            this.scoreP2       = 0;
+            this.gameEnded     = false;
+
+            this.grid          = Array.from({length: height}, () => Array(width).fill(null));
+            this.capturedLoops = [];
+            this.hoverX        = null;
+            this.hoverY        = null;
+
+            this.canvas = document.getElementById('gameCanvas');
+            this.ctx    = this.canvas.getContext('2d');
+            this.canvas.width  = (width  - 1) * cellSize + 40;
+            this.canvas.height = (height - 1) * cellSize + 40;
+
+            this._onClick      = (e) => this.handleClick(e);
+            this._onMove       = (e) => this.handleHover(e);
+            this._onTouchStart = (e) => { e.preventDefault(); this.handleClick(new MouseEvent('click', {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); };
+            this._onTouchMove  = (e) => { e.preventDefault(); this.handleHover(new MouseEvent('mousemove', {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); };
+            this.canvas.addEventListener('click',      this._onClick);
+            this.canvas.addEventListener('mousemove',  this._onMove);
+            this.canvas.addEventListener('touchstart', this._onTouchStart);
+            this.canvas.addEventListener('touchmove',  this._onTouchMove);
+
+            this.render();
+            this.connectWebSocket();
+        }
+
+        connectWebSocket() {
+            const isFile   = window.location.protocol === 'file:';
+            const wsProto  = (isFile || window.location.protocol === 'http:') ? 'ws:' : 'wss:';
+            const wsHost   = isFile ? 'localhost:3000' : (window.location.host || 'localhost:3000');
+            this.ws = new WebSocket(`${wsProto}//${wsHost}/ws/${this.gameCode}`);
+
+            this.ws.onopen    = () => console.log('WebSocket connected');
+            this.ws.onmessage = (e) => this.handleServerMessage(JSON.parse(e.data));
+            this.ws.onerror   = ()  => alert('Connection error. Is the server running?');
+            this.ws.onclose   = ()  => console.log('WebSocket disconnected');
+        }
+
+        handleServerMessage(msg) {
+            if (this.closed) return;
+            // Drop messages that belong to a different game session
+            if ((msg.type === 'GameState' || msg.type === 'MoveResult') && msg.game_code !== this.gameCode) return;
+            if (msg.game_code && msg.game_code !== this.gameCode) return;
+
+            switch (msg.type) {
+                case 'PlayerJoined': {
+                    this.playerNumber = msg.player_number;
+                    this.myColor = msg.player_number === 1 ? COLORS.BLUE : COLORS.YELLOW;
+                    const colorName  = msg.player_number === 1 ? 'Blue' : 'Yellow';
+                    const statusText = msg.player_number === 1 ? 'Waiting for opponent...' : 'Connected! Starting game...';
+                    const el = document.getElementById('currentTurn');
+                    el.textContent = `You are ${colorName} — ${statusText}`;
+                    el.style.color = this.myColor;
+                    break;
+                }
+                case 'GameStarted':
+                    closeModal('host-modal');
+                    setTimeout(() => this.updateUI(), 300);
+                    break;
+
+                case 'GameState':
+                    this._applyGameState(msg);
+                    break;
+
+                case 'MoveResult':
+                    if (msg.loop_points && msg.loop_points.length > 0) {
+                        this.capturedLoops.push({points: msg.loop_points, color: mapServerColor(msg.capturing_color)});
+                    }
+                    break;
+
+                case 'GameOver':
+                    this.handleGameOver(msg.info);
+                    break;
+
+                case 'RematchStatus': {
+                    const banner = document.getElementById('gameOverBanner');
+                    const myVoted = this.playerNumber === 1 ? msg.p1_voted : msg.p2_voted;
+                    const theyVoted = this.playerNumber === 1 ? msg.p2_voted : msg.p1_voted;
+                    if (myVoted && !theyVoted) {
+                        banner.textContent = 'Rematch requested — waiting for opponent...';
+                    }
+                    break;
+                }
+                case 'GameRestarted':
+                    this.capturedLoops = [];
+                    this.gameEnded     = false;
+                    const banner = document.getElementById('gameOverBanner');
+                    banner.classList.remove('visible');
+                    banner.textContent = '';
+                    break;
+
+                case 'Error':
+                    alert('Server error: ' + msg.message);
+                    break;
+            }
+        }
+
+        _applyGameState(state) {
+            this.grid = state.grid.map(row => row.map(cell => {
+                if (cell.Empty !== undefined)  return null;
+                const colorMap = {'Blue': COLORS.BLUE, 'Yellow': COLORS.YELLOW, 'Pink': COLORS.PINK};
+                if (cell.Occupied) return {color: colorMap[cell.Occupied], captured: false};
+                if (cell.Captured) return {color: colorMap[cell.Captured],  captured: true};
+                return null;
+            }));
+            this.currentTurn = state.current_turn === 'Blue' ? COLORS.BLUE : COLORS.YELLOW;
+            this.scoreP1     = state.score_p1;
+            this.scoreP2     = state.score_p2;
+            if (state.ended) this.gameEnded = true;
+            this.render();
+            this.updateUI();
+        }
+
+        handleGameOver(info) {
+            this.gameEnded = true;
+            const banner     = document.getElementById('gameOverBanner');
+            const winnerText = info.winner ? (info.winner === 'Blue' ? 'Blue Wins!' : 'Yellow Wins!') : 'Draw!';
+            banner.textContent = `${winnerText}  Blue ${info.score_p1} – Yellow ${info.score_p2}  •  Press Reset to request rematch`;
+            banner.classList.add('visible');
+            this.updateUI();
+        }
+
+        handleClick(event) {
+            if (!this.myColor || this.gameEnded) return;
+            if (this.currentTurn !== this.myColor) return;
+
+            const rect  = this.canvas.getBoundingClientRect();
+            const gridX = Math.round((event.clientX - rect.left - this.offsetX) / this.cellSize);
+            const gridY = Math.round((event.clientY - rect.top  - this.offsetY) / this.cellSize);
+            if (gridX < 0 || gridX >= this.width || gridY < 0 || gridY >= this.height) return;
+            if (this.grid[gridY][gridX] !== null) return;
+
+            this.ws.send(JSON.stringify({type: 'PlaceDot', x: gridX, y: gridY}));
+        }
+
+        handleHover(event) {
+            if (this.currentTurn !== this.myColor) {
+                if (this.hoverX !== null) { this.hoverX = null; this.hoverY = null; this.render(); }
+                return;
+            }
+            const rect  = this.canvas.getBoundingClientRect();
+            const gridX = Math.round((event.clientX - rect.left - this.offsetX) / this.cellSize);
+            const gridY = Math.round((event.clientY - rect.top  - this.offsetY) / this.cellSize);
+            const valid = gridX >= 0 && gridX < this.width && gridY >= 0 && gridY < this.height && this.grid[gridY][gridX] === null;
+            if (valid) {
+                if (this.hoverX !== gridX || this.hoverY !== gridY) { this.hoverX = gridX; this.hoverY = gridY; this.render(); }
+            } else {
+                if (this.hoverX !== null) { this.hoverX = null; this.hoverY = null; this.render(); }
+            }
+        }
+
+        updateUI() {
+            const name = this.currentTurn === this.player1Color ? 'Blue' : 'Yellow';
+            const el   = document.getElementById('currentTurn');
+            el.textContent = name;
+            el.style.color = this.currentTurn;
+            if (this.myColor) {
+                el.textContent += this.currentTurn === this.myColor ? ' (Your turn!)' : " (Opponent's turn)";
+            }
+            document.getElementById('scoreP1').textContent = this.scoreP1;
+            document.getElementById('scoreP2').textContent = this.scoreP2;
+        }
+
+        render() {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.drawGrid();
+            for (const loop of this.capturedLoops) this.drawLoopLines(loop.points, loop.color);
+            if (this.hoverX !== null) this.drawHoverPreview(this.hoverX, this.hoverY);
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const cell = this.grid[y][x];
+                    if (cell) this.drawDot(x, y, cell.color, cell.captured);
+                }
+            }
+        }
+
+        drawGrid() {
+            this.ctx.strokeStyle = COLORS.GRID;
+            this.ctx.lineWidth   = 1;
+            for (let x = 0; x < this.width; x++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX + x * this.cellSize, this.offsetY);
+                this.ctx.lineTo(this.offsetX + x * this.cellSize, this.offsetY + (this.height - 1) * this.cellSize);
+                this.ctx.stroke();
+            }
+            for (let y = 0; y < this.height; y++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX,                              this.offsetY + y * this.cellSize);
+                this.ctx.lineTo(this.offsetX + (this.width-1)*this.cellSize, this.offsetY + y * this.cellSize);
+                this.ctx.stroke();
+            }
+            this.ctx.fillStyle = '#555';
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    if (!this.grid[y][x]) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(this.offsetX + x * this.cellSize, this.offsetY + y * this.cellSize, 3, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                }
+            }
+        }
+
+        drawHoverPreview(x, y) {
+            const cx = this.offsetX + x * this.cellSize;
+            const cy = this.offsetY + y * this.cellSize;
+            const r  = this.cellSize * 0.25;
+            this.ctx.fillStyle   = this.currentTurn + '60';
+            this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+            this.ctx.strokeStyle = this.currentTurn; this.ctx.lineWidth = 2;
+            this.ctx.beginPath(); this.ctx.arc(cx, cy, r + 4, 0, Math.PI * 2); this.ctx.stroke();
+        }
+
+        drawLoopLines(points, color) {
+            if (points.length < 2) return;
+            this.ctx.strokeStyle = color; this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([5, 5]); this.ctx.globalAlpha = 0.6;
+            for (let i = 0; i < points.length; i++) {
+                for (let j = i + 1; j < points.length; j++) {
+                    const [x1,y1] = points[i], [x2,y2] = points[j];
+                    if (Math.abs(x1-x2) <= 1 && Math.abs(y1-y2) <= 1 && (x1!==x2||y1!==y2)) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(this.offsetX+x1*this.cellSize, this.offsetY+y1*this.cellSize);
+                        this.ctx.lineTo(this.offsetX+x2*this.cellSize, this.offsetY+y2*this.cellSize);
+                        this.ctx.stroke();
+                    }
+                }
+            }
+            this.ctx.setLineDash([]); this.ctx.globalAlpha = 1;
+        }
+
+        drawDot(x, y, color, captured = false) {
+            const cx = this.offsetX + x * this.cellSize;
+            const cy = this.offsetY + y * this.cellSize;
+            const r  = this.cellSize * 0.25;
+            if (captured) {
+                this.ctx.shadowBlur = 5; this.ctx.shadowColor = color;
+                this.ctx.fillStyle = color + '60';
+                this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+                this.ctx.shadowBlur = 0;
+                this.ctx.strokeStyle = color; this.ctx.lineWidth = 3;
+                const s = r * 0.7;
+                this.ctx.beginPath();
+                this.ctx.moveTo(cx-s,cy-s); this.ctx.lineTo(cx+s,cy+s);
+                this.ctx.moveTo(cx+s,cy-s); this.ctx.lineTo(cx-s,cy+s);
+                this.ctx.stroke();
+            } else {
+                this.ctx.shadowBlur = 10; this.ctx.shadowColor = color;
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+                this.ctx.shadowBlur = 0;
+                const g = this.ctx.createRadialGradient(cx-r*0.3, cy-r*0.3, 0, cx, cy, r);
+                g.addColorStop(0, 'rgba(255,255,255,0.4)');
+                g.addColorStop(1, 'rgba(255,255,255,0)');
+                this.ctx.fillStyle = g;
+                this.ctx.beginPath(); this.ctx.arc(cx, cy, r, 0, Math.PI * 2); this.ctx.fill();
+            }
+        }
+
+        // Send PlayAgainRequest to server when game is over
+        reset() {
+            if (!this.gameEnded) return;
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({type: 'PlayAgainRequest'}));
+                const banner = document.getElementById('gameOverBanner');
+                banner.textContent = 'Rematch requested — waiting for opponent...';
+            }
+        }
+
+        disconnect() {
+            this.closed = true;
+            if (this.ws) { try { this.ws.close(); } catch (_) {} this.ws = null; }
+        }
+
+        destroy() {
+            this.disconnect();
+            this.canvas.removeEventListener('click',      this._onClick);
+            this.canvas.removeEventListener('mousemove',  this._onMove);
+            this.canvas.removeEventListener('touchstart', this._onTouchStart);
+            this.canvas.removeEventListener('touchmove',  this._onTouchMove);
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Rust build artifacts
+dots-game-server/target/
+
+# Local SQLite database (runtime data)
+dots-game-server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE / editor
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
