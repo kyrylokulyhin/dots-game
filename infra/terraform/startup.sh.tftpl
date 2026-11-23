@@ -1,0 +1,200 @@
+#!/bin/bash
+# Runs as root on every boot. Idempotent: safe to run again.
+# Rendered by Terraform: only "$${...}" with a dollar-brace is a template variable; plain $VAR is bash.
+set -euo pipefail
+exec > >(tee -a /var/log/dots-startup.log) 2>&1
+echo "=== dots startup $(date -Is) ==="
+
+export DEBIAN_FRONTEND=noninteractive
+APP_PATH="${app_path}"
+DEPLOY_USER="${deploy_user}"
+
+# ---- 1 GB swap (e2-micro has 1 GB RAM)
+if [ ! -f /swapfile ]; then
+  fallocate -l 1G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+fi
+swapon /swapfile 2>/dev/null || true
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+# ---- data disk for the SQLite database
+DEV=/dev/disk/by-id/google-dots-data
+if ! blkid "$DEV" >/dev/null 2>&1; then
+  mkfs.ext4 -m 0 -F -L dots-data "$DEV"
+fi
+mkdir -p /var/lib/dots
+grep -q ' /var/lib/dots ' /etc/fstab || echo "$DEV /var/lib/dots ext4 discard,defaults,nofail 0 2" >> /etc/fstab
+mountpoint -q /var/lib/dots || mount /var/lib/dots
+
+# ---- packages: nginx, curl, Node.js 24 (NodeSource)
+if ! command -v nginx >/dev/null; then
+  apt-get update
+  apt-get install -y ca-certificates curl gnupg nginx
+fi
+if ! command -v node >/dev/null || ! node -v | grep -q '^v24\.'; then
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+  apt-get update
+  apt-get install -y nodejs
+fi
+
+# ---- users: "dots" runs the app, "$DEPLOY_USER" is what GitHub Actions logs in as
+id dots >/dev/null 2>&1 || useradd --system --home-dir /var/lib/dots --shell /usr/sbin/nologin dots
+chown dots:dots /var/lib/dots
+chmod 750 /var/lib/dots
+
+id "$DEPLOY_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
+cat > "/home/$DEPLOY_USER/.ssh/authorized_keys" <<'KEY'
+${deploy_public_key}
+KEY
+chown "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh/authorized_keys"
+chmod 600 "/home/$DEPLOY_USER/.ssh/authorized_keys"
+
+# The deploy user may only run the deploy script as root
+echo "$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/bin/dots-deploy" > /etc/sudoers.d/dots-deploy
+chmod 440 /etc/sudoers.d/dots-deploy
+visudo -cf /etc/sudoers.d/dots-deploy
+
+install -d -m 755 "$APP_PATH" "$APP_PATH/releases"
+
+# ---- Cloudflare origin certificate from Secret Manager
+install -d -m 0750 -o root -g www-data /etc/dots
+gcloud secrets versions access latest --secret="${cert_secret}" > /etc/dots/origin.pem
+gcloud secrets versions access latest --secret="${key_secret}" > /etc/dots/origin.key
+chown root:www-data /etc/dots/origin.pem /etc/dots/origin.key
+chmod 640 /etc/dots/origin.pem /etc/dots/origin.key
+
+# ---- nginx: TLS termination + WebSocket proxy to the app
+cat > /etc/nginx/sites-available/dots <<'NGINX'
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+server {
+  listen 443 ssl http2 default_server;
+  listen [::]:443 ssl http2 default_server;
+  server_name _;
+
+  ssl_certificate     /etc/dots/origin.pem;
+  ssl_certificate_key /etc/dots/origin.key;
+  ssl_protocols       TLSv1.2 TLSv1.3;
+
+  client_max_body_size 512k;
+
+  # Visitors that came in over plain HTTP: send them to HTTPS (needed for the PWA)
+  if ($http_cf_visitor ~ '"scheme":"http"') {
+    return 301 https://$host$request_uri;
+  }
+
+  add_header Strict-Transport-Security "max-age=31536000" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+  }
+}
+NGINX
+ln -sf /etc/nginx/sites-available/dots /etc/nginx/sites-enabled/dots
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl enable nginx
+systemctl reload nginx || systemctl restart nginx
+
+# ---- systemd service (starts once the first release is deployed)
+cat > /etc/systemd/system/dots.service <<UNIT
+[Unit]
+Description=Dots game server
+After=network-online.target var-lib-dots.mount
+Wants=network-online.target
+RequiresMountsFor=/var/lib/dots
+ConditionPathExists=$APP_PATH/current/server.js
+
+[Service]
+User=dots
+Group=dots
+WorkingDirectory=$APP_PATH/current
+ExecStart=/usr/bin/node --no-warnings server.js
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=DATA_DIR=/var/lib/dots
+Environment=TRUST_PROXY=1
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/dots
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# ---- deploy script: called by GitHub Actions via sudo
+#   sudo dots-deploy /tmp/dots-release.tgz <git-sha>
+cat > /usr/local/bin/dots-deploy <<DEPLOY
+#!/bin/bash
+set -euo pipefail
+APP_PATH="$APP_PATH"
+DEPLOY
+cat >> /usr/local/bin/dots-deploy <<'DEPLOY'
+ARCHIVE="$1"
+SHA="$(printf '%s' "$${2:-manual}" | tr -cd 'a-zA-Z0-9')"
+[ -f "$ARCHIVE" ] || { echo "No archive at $ARCHIVE" >&2; exit 1; }
+exec 9>/var/lock/dots-deploy
+flock 9
+
+RELEASE="$APP_PATH/releases/$SHA"
+rm -rf "$RELEASE"
+mkdir -p "$RELEASE"
+tar -xzf "$ARCHIVE" -C "$RELEASE"
+cd "$RELEASE"
+npm ci --omit=dev --no-audit --no-fund
+chown -R root:root "$RELEASE"
+
+PREVIOUS="$(readlink -f "$APP_PATH/current" || true)"
+ln -sfn "$RELEASE" "$APP_PATH/current.new"
+mv -T "$APP_PATH/current.new" "$APP_PATH/current"
+systemctl restart dots
+
+# Health check; roll back if the new release doesn't come up
+for i in $(seq 1 20); do
+  if curl -fsS http://127.0.0.1:3000/healthz >/dev/null 2>&1; then
+    echo "Deployed $SHA"
+    rm -f "$ARCHIVE"
+    # Keep the five newest releases
+    ls -1dt "$APP_PATH"/releases/* | tail -n +6 | xargs -r rm -rf
+    exit 0
+  fi
+  sleep 1
+done
+echo "Health check failed for $SHA" >&2
+journalctl -u dots -n 50 --no-pager >&2 || true
+if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ] && [ "$PREVIOUS" != "$RELEASE" ]; then
+  ln -sfn "$PREVIOUS" "$APP_PATH/current.new"
+  mv -T "$APP_PATH/current.new" "$APP_PATH/current"
+  systemctl restart dots
+  echo "Rolled back to $PREVIOUS" >&2
+fi
+exit 1
+DEPLOY
+chmod 755 /usr/local/bin/dots-deploy
+
+systemctl daemon-reload
+systemctl enable dots
+if [ -e "$APP_PATH/current/server.js" ]; then systemctl restart dots; fi
+echo "=== dots startup done ==="

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Dots</title>
+  <meta name="description" content="Dots — the paper capture game. Play online with a friend, on one device, or against the computer.">
+  <meta name="theme-color" content="#2d7ff9">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash
+    (function () {
+      var t = 'system';
+      try { t = (JSON.parse(localStorage.getItem('dots.profile') || '{}').theme) || 'system'; } catch (e) {}
+      if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ============ HOME ============ -->
+  <main id="home" class="screen home">
+    <header class="brand">
+      <img src="icon.svg" alt="" width="56" height="56">
+      <div class="brand-text">
+        <h1>Dots</h1>
+        <p data-i18n="tagline"></p>
+      </div>
+      <button class="icon-btn" id="historyOpen" data-i18n-title="history" aria-label="History">📊</button>
+      <button class="icon-btn" id="settingsOpen" data-i18n-title="settingsTitle" aria-label="Settings">⚙️</button>
+    </header>
+
+    <section class="card invite" id="inviteCard" hidden>
+      <p><span data-i18n="invited"></span> <b id="inviteCode"></b></p>
+      <button class="primary big" id="inviteJoin" data-i18n="joinGame"></button>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 data-i18n="you"></h2>
+        <span class="acct-chip" id="acctChip"></span>
+      </div>
+      <label class="field">
+        <span data-i18n="name"></span>
+        <div class="row">
+          <input id="name1" maxlength="20" autocomplete="nickname">
+          <button class="icon-btn" id="dice1" data-i18n-title="randomName" aria-label="Random name">🎲</button>
+        </div>
+      </label>
+      <div class="field">
+        <span data-i18n="color"></span>
+        <div class="swatches" id="sw1"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 data-i18n="online"></h2>
+        <span class="online-count" id="onlineCount"></span>
+      </div>
+      <button class="primary big" id="findBtn" data-i18n="findOpponent"></button>
+      <button class="big secondary" id="createBtn" data-i18n="createRoom2"></button>
+      <div class="row join-row">
+        <input id="joinCode" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" data-i18n-ph="roomCode">
+        <button id="joinBtn" data-i18n="join"></button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="here"></h2>
+      <details class="p2">
+        <summary data-i18n="player2"></summary>
+        <label class="field">
+          <span data-i18n="name"></span>
+          <div class="row">
+            <input id="name2" maxlength="20">
+            <button class="icon-btn" id="dice2" aria-label="Random name">🎲</button>
+          </div>
+        </label>
+        <div class="field">
+          <span data-i18n="color"></span>
+          <div class="swatches" id="sw2"></div>
+        </div>
+      </details>
+      <div class="row two">
+        <button id="localBtn" data-i18n="twoPlayers"></button>
+        <button id="botBtn" data-i18n="vsBot"></button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="settings"></h2>
+      <div class="field">
+        <span data-i18n="fieldSize"></span>
+        <div class="seg" id="sizeSeg"></div>
+      </div>
+      <div class="field">
+        <span data-i18n="target"></span>
+        <div class="seg" id="targetSeg"></div>
+      </div>
+      <div class="field">
+        <span data-i18n="moveTime"></span>
+        <div class="seg" id="timeSeg"></div>
+        <small class="hint" data-i18n="moveTimeHint"></small>
+      </div>
+      <div class="field">
+        <span data-i18n="startPos"></span>
+        <div class="seg" id="startSeg">
+          <button data-v="cross" data-i18n="cross"></button>
+          <button data-v="empty" data-i18n="empty"></button>
+        </div>
+      </div>
+    </section>
+
+    <details class="card rules">
+      <summary data-i18n="howTo"></summary>
+      <ol id="rulesList"></ol>
+    </details>
+  </main>
+
+  <!-- ============ HISTORY ============ -->
+  <main id="history" class="screen home" hidden>
+    <header class="brand">
+      <button class="icon-btn" id="historyBack" data-i18n-title="back" aria-label="Back">←</button>
+      <div class="brand-text"><h1 data-i18n="history"></h1></div>
+    </header>
+    <section class="card" id="historyNote"></section>
+    <section class="stats" id="stats"></section>
+    <section class="card hist-card">
+      <ul class="hist" id="histList"></ul>
+      <p class="muted empty" id="histEmpty" data-i18n="noGames" hidden></p>
+    </section>
+  </main>
+
+  <!-- ============ GAME ============ -->
+  <main id="play" class="screen play" hidden>
+    <div class="topbar">
+      <button class="icon-btn" id="leaveBtn" data-i18n-title="back" aria-label="Back">←</button>
+      <div class="pchip" id="chip0"><i class="dot"></i><span class="nm"></span><span class="tm"></span><b class="sc">0</b></div>
+      <div class="pchip" id="chip1"><i class="dot"></i><span class="nm"></span><span class="tm"></span><b class="sc">0</b></div>
+      <button class="icon-btn" id="inviteBtn" data-i18n-title="invite" aria-label="Invite" hidden>🔗</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="timer" id="timer" hidden><i></i></div>
+    <div class="offer" id="offerBar" hidden>
+      <span id="offerText"></span>
+      <button class="primary" id="offerYes" data-i18n="accept"></button>
+      <button id="offerNo" data-i18n="decline"></button>
+    </div>
+    <div class="board-wrap" id="boardWrap">
+      <canvas id="board"></canvas>
+      <div class="lobby" id="lobby" hidden>
+        <div class="lobby-card">
+          <div class="spinner"></div>
+          <h2 data-i18n="waiting"></h2>
+          <p data-i18n="shareHint"></p>
+          <div class="code" id="lobbyCode"></div>
+          <div class="row wrap">
+            <button class="primary" id="copyLink" data-i18n="copyLink"></button>
+            <button id="copyCode" data-i18n="copyCode"></button>
+            <button id="shareBtn" data-i18n="share"></button>
+          </div>
+          <button class="link" id="lobbyCancel" data-i18n="cancel"></button>
+        </div>
+      </div>
+      <div class="reactions-float" id="reactFloat"></div>
+    </div>
+    <div class="toolbar">
+      <button id="undoBtn" data-i18n="undo"></button>
+      <button id="endBtn" data-i18n="finish"></button>
+      <button id="resignBtn" data-i18n="resign"></button>
+      <span class="spacer"></span>
+      <div class="reacts" id="reacts"></div>
+      <button class="icon-btn" id="zoomOut" data-i18n-title="zoomOut" aria-label="Zoom out">−</button>
+      <button class="icon-btn" id="zoomIn" data-i18n-title="zoomIn" aria-label="Zoom in">+</button>
+    </div>
+  </main>
+
+  <!-- ============ DIALOGS ============ -->
+  <dialog id="endDlg">
+    <h2 id="endTitle"></h2>
+    <p id="endSub"></p>
+    <div class="final" id="endScore"></div>
+    <p class="muted" id="endNote"></p>
+    <div class="row two">
+      <button class="primary" id="rematchBtn" data-i18n="rematch"></button>
+      <button id="homeBtn" data-i18n="home"></button>
+    </div>
+  </dialog>
+
+  <dialog id="searchDlg">
+    <div class="spinner"></div>
+    <h2 data-i18n="searching"></h2>
+    <p class="muted" id="searchInfo"></p>
+    <p class="hint" data-i18n="searchHint"></p>
+    <button id="searchCancel" data-i18n="cancel"></button>
+  </dialog>
+
+  <dialog id="settingsDlg" class="settings-dlg">
+    <div class="dlg-head">
+      <h2 data-i18n="settingsTitle"></h2>
+      <button class="icon-btn" id="settingsClose" aria-label="Close">✕</button>
+    </div>
+
+    <section class="set-sec">
+      <h3 data-i18n="account"></h3>
+      <div id="acctOut">
+        <p class="hint" data-i18n="accountWhy"></p>
+        <form id="authForm" autocomplete="on">
+          <input id="authUser" name="username" autocomplete="username" maxlength="20" data-i18n-ph="username">
+          <input id="authPass" name="password" type="password" autocomplete="current-password" maxlength="200" data-i18n-ph="password">
+          <p class="err" id="authErr"></p>
+          <div class="row two">
+            <button type="submit" class="primary" id="loginBtn" data-i18n="logIn"></button>
+            <button type="button" id="registerBtn" data-i18n="register"></button>
+          </div>
+        </form>
+      </div>
+      <div id="acctIn" hidden>
+        <p><span data-i18n="signedInAs"></span> <b id="acctName"></b></p>
+        <button id="logoutBtn" data-i18n="logOut"></button>
+      </div>
+    </section>
+
+    <section class="set-sec">
+      <h3 data-i18n="language"></h3>
+      <div class="seg" id="langSeg">
+        <button data-lang="en">English</button>
+        <button data-lang="uk">Українська</button>
+      </div>
+    </section>
+
+    <section class="set-sec">
+      <h3 data-i18n="theme"></h3>
+      <div class="themes" id="themeSeg"></div>
+    </section>
+
+    <section class="set-sec">
+      <label class="check"><input type="checkbox" id="tapConfirm"> <span data-i18n="tapConfirm"></span></label>
+    </section>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

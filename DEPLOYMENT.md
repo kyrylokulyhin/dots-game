@@ -1,90 +1,108 @@
-# Dots Game — Deployment
+# Dots — Deployment (Google Cloud + Cloudflare, Terraform, GitHub Actions)
 
-Deploys to the same Compute Engine VM as kmhome over SSH. The Rust server runs
-as a systemd service behind nginx, which also serves the static frontend and
-proxies WebSocket connections.
-
-## Architecture on the VM
+This works the same way as kmhome:
+- Terraform is applied from your machine, with its state stored in a GCS bucket.
+- GitHub Actions tests every push and deploys `main` to the VM over SSH.
+- GitHub never holds Google Cloud credentials.
 
 ```
-/var/www/dots-game/
-├── releases/
-│   └── <git-sha>/
-│       ├── server/
-│       │   └── dots-game-server   ← compiled Rust binary
-│       └── frontend/
-│           └── index.html
-├── shared/
-│   └── data/
-│       └── dots_game.db           ← SQLite DB (persists across deploys)
-└── current -> releases/<git-sha>  ← symlink, updated atomically on each deploy
+Players ──HTTPS──▶ Cloudflare (dots.<your-domain>, proxied, Full strict)
+                        │ HTTPS with a Cloudflare Origin CA certificate
+                        ▼
+           GCP e2-micro VM (Debian 12)            GitHub Actions
+           nginx :443 ──▶ node :3000 (localhost)   ──ssh/scp──▶ deploy user
+                              │                                 sudo dots-deploy
+                 /var/lib/dots (separate disk: SQLite, daily snapshots)
 ```
 
-nginx serves:
-- `https://dots.yourdomain.com/`     → `current/frontend/index.html`
-- `https://dots.yourdomain.com/ws/*` → proxied to the Rust server on `127.0.0.1:3001`
+**Terraform creates** (in `infra/terraform`):
+- **Google Cloud:**
+  - an e2-micro VM, the smallest size and free-tier eligible
+  - a static IP
+  - a 10 GB data disk with daily snapshots, protected by `prevent_destroy`
+  - Secret Manager secrets for the origin certificate
+  - the VM's service account
+  - firewall rules: port 443 only from Cloudflare's IP ranges, and port 22 (key-only SSH) for deploys
+- **Cloudflare:**
+  - a proxied `A` record
+  - an Origin CA certificate
 
-## GitHub Actions Secrets & Variables
+The VM installs Node 24 and nginx on first boot and creates:
+- the `deploy` user, holding the key whose private half GitHub stores
+- `/usr/local/bin/dots-deploy`, the only command `deploy` may run as root
+- the `dots` service, which runs as an unprivileged user
 
-Set these in the `production` environment of the dots-game repo
-(`Settings → Environments → production`). They match kmhome's naming so the
-same deploy SSH key and VM host work across both repos.
+## One-time setup
 
-| Name                | Kind     | Value                              |
-|---------------------|----------|------------------------------------|
-| `VM_HOST`           | variable | VM public IP                       |
-| `VM_PATH`           | variable | `/var/www/dots-game`               |
-| `VM_USER`           | variable | `deploy` (or whatever kmhome uses) |
-| `VM_SSH_PRIVATE_KEY`| secret   | Contents of `deploy_vm_ed25519`    |
-
-Run the setup script to configure these automatically (requires `gh` CLI):
+You need these installed: `gcloud`, `terraform`, `gh` (GitHub CLI), and bash. On Windows, use Git Bash.
 
 ```bash
-VM_IP=<vm-public-ip> \
-SSH_KEY_PATH=/path/to/kmhome/infra/keys/deploy_vm_ed25519 \
-./infra/scripts/configure-github-actions.sh
+gcloud auth login
+gcloud auth application-default login
+gh auth login
+
+export CLOUDFLARE_API_TOKEN=...   # Zone:DNS:Edit + Zone:SSL and Certificates:Edit on the zone
+
+PROJECT_ID=your-project-id \
+APP_DOMAIN=dots.your-domain.com \
+CF_ZONE_ID=your-cloudflare-zone-id \
+./infra/scripts/bootstrap-gcp.sh
 ```
 
-## One-Time VM Setup
+The bootstrap script:
+1. generates the deploy key in `infra/keys/`
+2. enables the needed APIs
+3. creates the Terraform state bucket `<project>-dots-tfstate`
+4. writes `backend.hcl` and `terraform.auto.tfvars.json`
+5. runs `terraform apply`
 
-Run once on the VM (as root) after the machine is provisioned:
+Then wire up GitHub:
 
 ```bash
-sudo bash infra/scripts/setup-vm.sh dots.yourdomain.com /var/www/dots-game deploy 3001
+GH_REPO=kyrylokulyhin/dots-game ./infra/scripts/configure-github-actions.sh
 ```
 
-This:
-1. Creates the directory structure
-2. Installs and enables the nginx site for the subdomain
-3. Installs and enables the `dots-game-server` systemd service
-4. Adds `sudo` rules so the deploy user can restart the service and reload nginx
+This creates the `production` environment with the variables `VM_HOST`, `VM_PATH`, `VM_USER` and `APP_URL`, and the secret `VM_SSH_PRIVATE_KEY`.
 
-Then add a Cloudflare DNS **A record**: `dots.yourdomain.com → <VM public IP>` with
-proxy enabled (Full Strict SSL via the existing Cloudflare Origin CA cert).
+Finally, re-run the latest workflow on `main` from the Actions tab, or push a commit. That deploys the app.
 
-## Deploy Flow (CI/CD)
+## Every deploy (automatic)
 
-On every push to `main`:
+`.github/workflows/ci.yml` runs on each push:
+1. **test**: `npm ci && npm test`, which runs the game-rule tests and the server/API tests.
+2. **terraform**: `fmt -check` and `validate`.
+3. **deploy**, on `main` only:
+   - packs `server.js db.js package*.json public/`
+   - uploads the archive with `scp`
+   - runs `sudo dots-deploy <archive> <sha>` on the VM. That command unpacks the release into `releases/<sha>`, runs `npm ci --omit=dev`, switches the `current` symlink, restarts the service, checks `/healthz`, and **rolls back automatically** if the check fails.
+   - finally, a smoke test checks `https://dots.<domain>/healthz` through Cloudflare.
 
-1. **test** — `cargo check` on the server crate
-2. **deploy** (only on `main`, not PRs):
-   - Builds the Rust binary with `cargo build --release`
-   - Creates a tarball: binary + `index.html`
-   - Uploads via `scp` to `/tmp/dots-game-release.tgz`
-   - SSH into VM:
-     - Extracts to `releases/<git-sha>/`
-     - Atomically flips the `current` symlink
-     - `systemctl restart dots-game-server`
-     - `systemctl reload nginx`
+Infrastructure changes (anything under `infra/terraform`) are applied by hand:
 
-The SQLite database at `shared/data/dots_game.db` survives every deploy.
+```bash
+terraform -chdir=infra/terraform plan
+terraform -chdir=infra/terraform apply
+```
 
-## Infra Files
+## Operating it
 
-| File                                    | Purpose                              |
-|-----------------------------------------|--------------------------------------|
-| `.github/workflows/ci.yml`             | CI/CD workflow                       |
-| `infra/nginx/dots-game.conf`           | nginx vhost template                 |
-| `infra/systemd/dots-game-server.service`| systemd unit template               |
-| `infra/scripts/setup-vm.sh`           | One-time VM setup                    |
-| `infra/scripts/configure-github-actions.sh` | GitHub Actions env setup        |
+| Task | How |
+| --- | --- |
+| SSH in | `terraform -chdir=infra/terraform output -raw ssh` (through IAP) |
+| App logs | `sudo journalctl -u dots -f` |
+| First-boot log | `sudo cat /var/log/dots-startup.log` |
+| Releases | `/var/www/dots-game/releases/<sha>`, with `current` pointing at the live one; the last 5 are kept |
+| Database | `/var/lib/dots/dots.db` on the data disk, snapshotted daily at 04:00 and kept 7 days |
+
+## Cost
+
+- The e2-micro VM, 20 GB of standard disk and 1 GB of outbound traffic per month are in the Google Cloud free tier, in us-central1, us-west1 or us-east1.
+- The external IPv4 address costs about $3–4 per month.
+- Snapshots, Secret Manager and the state bucket cost a few cents per month.
+
+## Notes
+
+- **SSL mode:** kmhome's Terraform already sets the zone to SSL *Full (strict)* and *Always Use HTTPS*. If this game lives in another zone that isn't strict, set `manage_ssl_rule = true`.
+- **kmhome's country allowlist:** kmhome's Cloudflare rule only applies to kmhome's own hostname, so the game is reachable from anywhere.
+- **Restarts end online games:** online rooms live in memory, so a deploy ends games in progress. Accounts and history are kept.
+- **Secrets:** `infra/keys/`, `backend.hcl`, `terraform.auto.tfvars.json` and any local state hold secrets. They are git-ignored.

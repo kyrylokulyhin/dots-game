@@ -1,0 +1,10 @@
+# infra/scripts/bootstrap-gcp.sh writes terraform.auto.tfvars.json for you.
+# Use this file only if you run Terraform by hand: copy to terraform.tfvars and fill in.
+# The Cloudflare token is NOT here: export CLOUDFLARE_API_TOKEN instead.
+
+project_id         = "my-gcp-project"
+region             = "us-central1"
+zone               = "us-central1-a"
+app_domain         = "dots.example.com"
+cloudflare_zone_id = "0123456789abcdef0123456789abcdef"
+deploy_public_key  = "ssh-ed25519 AAAA... dots-deploy"

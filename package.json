@@ -1,0 +1,17 @@
+{
+  "name": "dots",
+  "version": "1.0.0",
+  "description": "Dots — the paper capture game. Play online, on one device, or against the computer.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/game.test.js && node test/server.test.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

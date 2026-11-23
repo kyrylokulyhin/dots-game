@@ -10,50 +10,65 @@ on:
 permissions:
   contents: read
 
+env:
+  NODE_VERSION: '24'
+
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Node
+        uses: actions/setup-node@v6
         with:
-          workspaces: dots-game-server
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: Check server
-        run: cargo check --manifest-path dots-game-server/Cargo.toml
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format check
+        run: terraform -chdir=infra/terraform fmt -check -recursive
+
+      - name: Validate
+        run: |
+          terraform -chdir=infra/terraform init -backend=false -input=false
+          terraform -chdir=infra/terraform validate
 
   deploy:
-    needs: test
+    needs: [test, terraform]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    environment: production
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
     concurrency:
       group: vm-dots-game
       cancel-in-progress: false
     env:
       VM_HOST: ${{ vars.VM_HOST }}
-      VM_PATH: ${{ vars.VM_PATH }}
       VM_USER: ${{ vars.VM_USER }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: dots-game-server
-
-      - name: Build server binary
-        run: cargo build --release --manifest-path dots-game-server/Cargo.toml
+      - name: Check environment is configured
+        run: |
+          if [ -z "${VM_HOST}" ] || [ -z "${VM_USER}" ]; then
+            echo "::error::The production environment is not configured. Run infra/scripts/configure-github-actions.sh."
+            exit 1
+          fi
 
       - name: Write deploy key
         run: |
@@ -63,60 +78,35 @@ jobs:
 
       - name: Add VM to known hosts
         run: |
-          mkdir -p ~/.ssh
           tmp_known_hosts="$(mktemp)"
-
           for attempt in 1 2 3 4 5; do
             if ssh-keyscan -T 15 -H "${VM_HOST}" > "${tmp_known_hosts}" 2>/dev/null && [ -s "${tmp_known_hosts}" ]; then
               cat "${tmp_known_hosts}" >> ~/.ssh/known_hosts
               rm -f "${tmp_known_hosts}"
               exit 0
             fi
-
             sleep 5
           done
-
           echo "Failed to fetch SSH host key from ${VM_HOST}" >&2
-          rm -f "${tmp_known_hosts}"
           exit 1
 
-      - name: Create deployment archive
-        run: |
-          mkdir -p /tmp/dots-game-release/server
-          mkdir -p /tmp/dots-game-release/frontend
-          cp dots-game-server/target/release/dots-game-server /tmp/dots-game-release/server/
-          cp dots-game-frontend/index.html                    /tmp/dots-game-release/frontend/
-          tar -czf /tmp/dots-game-release.tgz -C /tmp/dots-game-release .
+      - name: Create release archive
+        run: tar -czf /tmp/dots-release.tgz server.js db.js package.json package-lock.json public
 
       - name: Upload release archive
-        run: scp -i ~/.ssh/id_deploy /tmp/dots-game-release.tgz "${VM_USER}@${VM_HOST}:/tmp/dots-game-release.tgz"
+        run: scp -i ~/.ssh/id_deploy /tmp/dots-release.tgz "${VM_USER}@${VM_HOST}:/tmp/dots-release.tgz"
 
       - name: Deploy on VM
-        env:
-          RELEASE_SHA: ${{ github.sha }}
+        run: ssh -i ~/.ssh/id_deploy "${VM_USER}@${VM_HOST}" "sudo /usr/local/bin/dots-deploy /tmp/dots-release.tgz ${GITHUB_SHA}"
+
+      - name: Smoke test through Cloudflare
+        if: vars.APP_URL != ''
         run: |
-          ssh -i ~/.ssh/id_deploy "${VM_USER}@${VM_HOST}" "APP_PATH='${VM_PATH}' RELEASE_SHA='${RELEASE_SHA}' bash -s" <<'SCRIPT'
-          set -euo pipefail
-
-          release_path="${APP_PATH}/releases/${RELEASE_SHA}"
-          shared_path="${APP_PATH}/shared"
-
-          mkdir -p "${APP_PATH}/releases"
-          mkdir -p "${shared_path}/data"
-
-          rm -rf "${release_path}"
-          mkdir -p "${release_path}"
-          tar -xzf /tmp/dots-game-release.tgz -C "${release_path}"
-
-          chmod +x "${release_path}/server/dots-game-server"
-
-          ln -sfn "${release_path}" "${APP_PATH}/current"
-
-          sudo systemctl restart dots-game-server
-          sudo systemctl reload nginx
-
-          rm -f /tmp/dots-game-release.tgz
-          SCRIPT
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS "${{ vars.APP_URL }}/healthz"; then exit 0; fi
+            sleep 5
+          done
+          echo "::warning::${{ vars.APP_URL }}/healthz did not answer. The VM deploy succeeded; check DNS/Cloudflare."
 
       - name: Remove deploy key
         if: always()

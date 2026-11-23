@@ -1,0 +1,13 @@
+{
+  "name": "Dots",
+  "short_name": "Dots",
+  "description": "The paper capture game. Play online, on one device, or against the computer.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef2f7",
+  "theme_color": "#2d7ff9",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
