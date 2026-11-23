@@ -40,8 +40,10 @@ if [[ ! -f "${KEY_PATH}" ]]; then
     ssh-keygen -t ed25519 -N "" -C "dots-deploy" -f "${KEY_PATH}"
 fi
 
-if ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
-    echo "No Application Default Credentials found. Run: gcloud auth application-default login" >&2
+# Terraform uses Application Default Credentials, or GOOGLE_OAUTH_ACCESS_TOKEN if set
+# (e.g. GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token --account you@example.com)").
+if [[ -z "${GOOGLE_OAUTH_ACCESS_TOKEN:-}" ]] && ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
+    echo "No Google credentials for Terraform. Run: gcloud auth application-default login" >&2
     exit 1
 fi
 
@@ -77,6 +79,10 @@ EOF
 
 terraform -chdir="${TF_DIR}" init -backend-config=backend.hcl
 terraform -chdir="${TF_DIR}" validate
+if [[ "${SKIP_APPLY:-0}" == "1" ]]; then
+    echo "SKIP_APPLY=1: stopping before apply. Run: terraform -chdir=infra/terraform apply"
+    exit 0
+fi
 terraform -chdir="${TF_DIR}" apply
 
 echo

@@ -28,7 +28,8 @@ APP_URL="$(terraform -chdir="${TF_DIR}" output -raw app_url)"
 gh api --method PUT "repos/${REPO}/environments/${ENVIRONMENT}" >/dev/null
 
 gh variable set VM_HOST --env "${ENVIRONMENT}" --repo "${REPO}" --body "${VM_HOST}"
-gh variable set VM_PATH --env "${ENVIRONMENT}" --repo "${REPO}" --body "${VM_PATH}"
+# MSYS_NO_PATHCONV: stop Git Bash on Windows from rewriting /var/www/... into a Windows path
+MSYS_NO_PATHCONV=1 gh variable set VM_PATH --env "${ENVIRONMENT}" --repo "${REPO}" --body "${VM_PATH}"
 gh variable set VM_USER --env "${ENVIRONMENT}" --repo "${REPO}" --body "${VM_USER}"
 gh variable set APP_URL --env "${ENVIRONMENT}" --repo "${REPO}" --body "${APP_URL}"
 gh secret set VM_SSH_PRIVATE_KEY --env "${ENVIRONMENT}" --repo "${REPO}" < "${KEY_PATH}"
