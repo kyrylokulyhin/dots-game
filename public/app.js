@@ -351,7 +351,38 @@ board.onBlocked = (why) => {
   if (S.status === 'playing') toast(t('waitMove', { name: S.players[g.turn]?.name || '' }));
 };
 
+// ---------------------------------------------------------------- zoomed-in focus mode
+let focusEntry = false; // whether we pushed a history entry for focus (so Back exits it)
+let hintTimer;
+function onFocusChange(focused) {
+  $('play').classList.toggle('focus', focused);
+  if (focused && !focusEntry && !$('play').hidden) {
+    history.pushState({ focus: true }, '', location.href);
+    focusEntry = true;
+  } else if (!focused && focusEntry) {
+    focusEntry = false;
+    history.back();
+  }
+  const hint = $('focusHint');
+  clearTimeout(hintTimer);
+  hint.hidden = true;
+  if (focused && !store.get('dots.focusHintSeen', false)) {
+    store.set('dots.focusHintSeen', true);
+    hint.textContent = t('focusHint');
+    hint.hidden = false;
+    hintTimer = setTimeout(() => (hint.hidden = true), 4000);
+  }
+}
+
 function show(screen) {
+  if (screen !== 'play' && board.focused) {
+    board.zoom = 1;
+    board.focused = false;
+    board.canvas.classList.remove('zoomed');
+    $('play').classList.remove('focus');
+    // Leave the extra history entry in place: going back now would restore an old URL
+    focusEntry = false;
+  }
   $('home').hidden = screen !== 'home';
   $('play').hidden = screen !== 'play';
   $('history').hidden = screen !== 'history';
@@ -962,8 +993,21 @@ function initPlay() {
   $('copyCode').onclick = () => copy(S.code);
   $('shareBtn').onclick = share;
   $('inviteBtn').onclick = share;
-  $('zoomIn').onclick = () => board.setZoom(board.zoom * 1.3);
-  $('zoomOut').onclick = () => board.setZoom(board.zoom / 1.3);
+  $('zoomIn').onclick = () => board.zoomBy(1.5);
+  $('zoomOut').onclick = () => board.zoomBy(1 / 1.5);
+  $('focusClose').onclick = () => board.exitFocus();
+  board.attachMinimap($('minimap'));
+  board.onFocusChange = onFocusChange;
+  window.addEventListener('popstate', () => {
+    // Phone "back" while zoomed in: return to the whole board instead of leaving
+    if (focusEntry) {
+      focusEntry = false;
+      board.exitFocus();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && board.focused && !$('play').hidden) board.exitFocus();
+  });
   $('undoBtn').onclick = () => {
     const g = S.game;
     if (!g.moves.length) return;
